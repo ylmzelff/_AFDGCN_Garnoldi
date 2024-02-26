@@ -15,25 +15,25 @@ class feature_attention(nn.Module):
     def __init__(self, input_dim, output_dim, kernel_size=5, rate=4):
         super(feature_attention, self).__init__()
         self.nconv = nn.Conv2d(input_dim, output_dim, kernel_size=(1, 1))
-        self.channel_attention = nn.Sequential(  
-            nn.Linear(output_dim, int(output_dim / rate)),  
-            nn.ReLU(inplace=True),  
-            nn.Linear(int(output_dim / rate), output_dim)  
+        self.channel_attention = nn.Sequential(
+            nn.Linear(output_dim, int(output_dim / rate)),
+            nn.ReLU(inplace=True),
+            nn.Linear(int(output_dim / rate), output_dim)
         )
-        self.spatial_attention = nn.Sequential(  
-            nn.Conv2d(output_dim, int(output_dim / rate), kernel_size=(1, kernel_size), padding=(0, (kernel_size - 1) // 2)),  
-            nn.BatchNorm2d(int(output_dim / rate)),  
-            nn.ReLU(inplace=True),  
-            nn.Conv2d(int(output_dim / rate), output_dim, kernel_size=(1, kernel_size), padding=(0, (kernel_size - 1) // 2)),  
-            nn.BatchNorm2d(output_dim)  
+        self.spatial_attention = nn.Sequential(
+            nn.Conv2d(output_dim, int(output_dim / rate), kernel_size=(1, kernel_size), padding=(0, (kernel_size - 1) // 2)),
+            nn.BatchNorm2d(int(output_dim / rate)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(int(output_dim / rate), output_dim, kernel_size=(1, kernel_size), padding=(0, (kernel_size - 1) // 2)),
+            nn.BatchNorm2d(output_dim)
         )
-        
+
     def forward(self, x):
         x = x.permute(0, 3, 2, 1)  # [B, D, N, T]
         x = self.nconv(x)  # 扩展数据的特征维度
-        b, c, n, t = x.shape  
+        b, c, n, t = x.shape
         x_permute = x.permute(0, 2, 3, 1)  # [B, N, T, C]
-        x_att_permute = self.channel_attention(x_permute) 
+        x_att_permute = self.channel_attention(x_permute)
         x_channel_att = x_att_permute.permute(0, 3, 1, 2)  # [B, C, N, T]
         x = x * x_channel_att
         x_spatial_att = self.spatial_attention(x).sigmoid()
@@ -53,8 +53,42 @@ class AVWGCN(nn.Module):
         self.weights_pool = nn.Parameter(torch.FloatTensor(embed_dim, cheb_k, in_dim, out_dim))
         self.bias_pool = nn.Parameter(torch.FloatTensor(embed_dim, out_dim))
 
+    def forward(self, x, adj):
+        """
+        :param x: (B, N, C_in)
+        :param adj: (N, N), adjacency matrix
+        :return: (B, N, C_out)
+        """
+        node_num = adj.shape[0]
+
+        # Normalize the adjacency matrix
+        rowsum = adj.sum(dim=1, keepdim=True)
+        normalized_adj = adj / rowsum
+
+        # Expand dimensions for batch processing
+        normalized_adj = normalized_adj.unsqueeze(0).expand(x.size(0), -1, -1)
+
+        # ChebNet convolution operation
+        supports = [torch.eye(node_num).to(adj.device), normalized_adj]
+        for k in range(2, self.cheb_k):
+            supports.append(2 * normalized_adj * supports[-1] - supports[-2])
+        supports = torch.stack(supports, dim=0)  # (K, N, N)
+
+        # Perform graph convolution
+        weights = self.weights_pool.unsqueeze(0).unsqueeze(0).expand(x.size(0), -1, -1, -1, -1)
+        bias = self.bias_pool.unsqueeze(0).expand(x.size(0), -1, -1)
+
+        x_g = torch.einsum("knm,bmc->bknc", supports, x)  # (B, K, N, C_in)
+        x_g = x_g.permute(0, 2, 1, 3)  # (B, N, K, C_in)
+        x_gconv = torch.einsum('bnki,nkio->bno', x_g, weights) + bias  # (B, N, C_out)
+
+        return x_gconv
+
+
+'''
     def forward(self, x, node_embedding):
         """
+        :param x: (B, N, C_in)
         :param x: (B, N, C_in)
         :param node_embedding: (N, D), 这里的node_embedding是可学习的
         :return: (B, N, C_out)
@@ -68,6 +102,7 @@ class AVWGCN(nn.Module):
         for k in range(2, self.cheb_k):
             # Z(k) = 2 * L * Z(k-1) - Z(k-2)
             #support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
+            # Z(k) = Z(k-1)
             support_set.append(support_set[-1])
         supports = torch.stack(support_set, dim=0) # (K, N, N)
         # (N, D) * (D, K, C_in, C_out) -> (N, K, C_in, C_out)
@@ -80,6 +115,7 @@ class AVWGCN(nn.Module):
         x_g = x_g.permute(0, 2, 1, 3)  # (B, N, K, C_in) * (N, K, C_in, C_out)
         x_gconv = torch.einsum('bnki,nkio->bno', x_g, weights) + bias  # (B, N, C_out)
         return x_gconv
+'''
 
 class AGCRNCell(nn.Module):
     def __init__(self, num_node, in_dim, out_dim, cheb_k, embed_dim):
@@ -248,138 +284,6 @@ class GraphAttentionLayer(nn.Module):
         else:
             return out
 
-# *************************************************************************************************
-class BernConv(MessagePassing):
-
-    def __init__(self, in_channels, out_channels, K,bias=True, **kwargs):
-
-        kwargs.setdefault('aggr', 'add')
-        super(BernConv, self).__init__(**kwargs)
-        assert K > 0
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.weight = Parameter(torch.Tensor(in_channels, out_channels))
-
-        if bias:
-            self.bias = Parameter(torch.Tensor(out_channels))
-        else:
-            self.register_parameter('bias', None)
-
-        self.reset_parameters()
-        self.K=K
-
-    def reset_parameters(self):
-        stdv = math.sqrt(6.0 / (self.weight.size(-2) + self.weight.size(-1)))
-        self.weight.data.uniform_(-stdv, stdv)
-        self.bias.data.fill_(0)
-
-    def forward(self,x,edge_index,coe,edge_weight=None):
-
-        TEMP=F.relu(coe)
-
-        #L=I-D^(-0.5)AD^(-0.5)
-        edge_index1, norm1 = get_laplacian(edge_index, edge_weight,normalization='sym', dtype=x.dtype, num_nodes=x.size(self.node_dim))
-
-        #2I-L
-        edge_index2, norm2 = add_self_loops(edge_index1,-norm1,fill_value=2.,num_nodes=x.size(self.node_dim))
-
-        tmp=[]
-        tmp.append(x)
-        for i in range(self.K):
-                x=self.propagate(edge_index2,x=x,norm=norm2,size=None)
-                tmp.append(x)
-
-        out=(comb(self.K,0)/(2**self.K))*TEMP[0]*tmp[self.K]
-
-        for i in range(self.K):
-                x=tmp[self.K-i-1]
-                x=self.propagate(edge_index1,x=x,norm=norm1,size=None)
-                for j in range(i):
-                        x=self.propagate(edge_index1,x=x,norm=norm1,size=None)
-
-                out=out+(comb(self.K,i+1)/(2**self.K))*TEMP[i+1]*x
-
-        out=out@self.weight
-        if self.bias is not None:
-                out+=self.bias
-        return out
-
-    def message(self, x_j, norm):
-        return norm.view(-1, 1) * x_j
-
-    def __repr__(self):
-        return '{}({}, {}, K={}, normalization={})'.format(
-            self.__class__.__name__, self.in_channels, self.out_channels,
-            self.weight.size(0), self.normalization)
-
-"""
-class Bern_prop(MessagePassing):
-    def __init__(self, K, bias=True, **kwargs):
-        super(Bern_prop, self).__init__(aggr='add', **kwargs)
-
-        self.K = K
-        self.temp = Parameter(torch.Tensor(self.K + 1))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.temp.data.fill_(1)
-
-    def forward(self, x, edge_index, edge_weight=None):
-        TEMP = F.relu(self.temp)
-
-        # L=I-D^(-0.5)AD^(-0.5)
-        edge_index1, norm1 = get_laplacian(edge_index, edge_weight, normalization='sym', dtype=x.dtype,
-                                           num_nodes=x.size(self.node_dim))
-        # 2I-L
-        edge_index2, norm2 = add_self_loops(edge_index1, -norm1, fill_value=2., num_nodes=x.size(self.node_dim))
-
-        tmp = []
-        tmp.append(x)
-        for i in range(self.K):
-            x = self.propagate(edge_index2, x=x, norm=norm2, size=None)
-            tmp.append(x)
-
-        out = (comb(self.K, 0) / (2 ** self.K)) * TEMP[0] * tmp[self.K]
-
-        for i in range(self.K):
-            x = tmp[self.K - i - 1]
-            x = self.propagate(edge_index1, x=x, norm=norm1, size=None)
-            for j in range(i):
-                x = self.propagate(edge_index1, x=x, norm=norm1, size=None)
-
-            out = out + (comb(self.K, i + 1) / (2 ** self.K)) * TEMP[i + 1] * x
-        return out
-
-    def message(self, x_j, norm):
-        return norm.view(-1, 1) * x_j
-
-    def __repr__(self):
-        return '{}(K={}, temp={})'.format(self.__class__.__name__, self.K,
-                                          self.temp)
-
-"""
-class BernNet(nn.Module):
-    def __init__(self, K=10):
-        super(BernNet, self).__init__()
-
-        self.conv1 = BernConv(1, 32, K)
-        self.conv2 = BernConv(32, 64, K)
-
-        self.fc2 = torch.nn.Linear(64, 1)
-        self.coe = Parameter(torch.Tensor(K + 1))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        self.coe.data.fill_(1)
-
-    def forward(self, data):
-        x = data.x_tmp
-        edge_index = data.edge_index
-
-        x = F.relu(self.conv1(x, edge_index, self.coe))
-        x = F.relu(self.conv2(x, edge_index, self.coe))
-        return self.fc2(x)
 
 class Model(nn.Module):
     def __init__(self, num_node, input_dim, hidden_dim, output_dim, embed_dim, cheb_k, horizon, num_layers, heads, timesteps, A, kernel_size):
@@ -398,8 +302,7 @@ class Model(nn.Module):
         self.node_embedding = nn.Parameter(torch.randn(self.num_node, embed_dim), requires_grad=True)
         # encoder
         self.feature_attention = feature_attention(input_dim=input_dim, output_dim=hidden_dim, kernel_size=kernel_size)
-        #self.encoder = AVWDCRNN(num_node, hidden_dim, hidden_dim, cheb_k, embed_dim, num_layers)
-        self.encoder = BernNet(K=10)
+        self.encoder = AVWDCRNN(num_node, hidden_dim, hidden_dim, cheb_k, embed_dim, num_layers)
         self.GraphAttentionLayer = GraphAttentionLayer(hidden_dim, hidden_dim, A, dropout=0.5, alpha=0.2, concat=True)
         self.MultiHeadAttention = MultiHeadAttention(embed_size=hidden_dim, heads=heads)
         # predict

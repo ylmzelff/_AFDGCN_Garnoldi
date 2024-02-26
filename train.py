@@ -13,10 +13,7 @@ from lib.dataloader import get_dataloader
 from lib.TrainInits import print_model_parameters
 from lib.load_graph import get_Gaussian_matrix, get_adjacency_matrix
 import scipy.sparse as sp
-from torch.utils.tensorboard import SummaryWriter
 
-
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
 # *****************************************  参数初始化配置      Parametre başlatma yapılandırması ****************************************** #
 init_seed(args.seed)
 '''
@@ -26,42 +23,45 @@ else:
 '''
 args.device = 'cpu'
 
-#A = get_Gaussian_matrix(args.graph_path, args.num_nodes, args.normalized_k, id_filename=args.filename_id)
 
-def myminimum(A,B):
-    BisBigger = A-B
+# A = get_Gaussian_matrix(args.graph_path, args.num_nodes, args.normalized_k, id_filename=args.filename_id)
+
+def myminimum(A, B):
+    BisBigger = A - B
     BisBigger.data = np.where(BisBigger.data >= 0, 1, 0)
     return A - A.multiply(BisBigger) + B.multiply(BisBigger)
+
 
 def normalize_adjHPI(adj):
     adj = sp.coo_matrix(adj)
 
     rowsum = np.array(adj.sum(1))
-    
-    deg_row = np.tile(rowsum, (1,adj.shape[0]))
-    
-    #deg_row = deg_row.T
+
+    deg_row = np.tile(rowsum, (1, adj.shape[0]))
+
+    # deg_row = deg_row.T
     deg_row = sp.coo_matrix(deg_row)
-    
+
     sim = adj.dot(adj)
-    
-    #y = sim.copy().tocsr()
-    #y.data.fill(1)
+
+    # y = sim.copy().tocsr()
+    # y.data.fill(1)
     X = sim.astype(bool).astype(int)
     deg_row = deg_row.multiply(X)
-    
+
     deg_row = myminimum(deg_row, deg_row.T)
-    
-    sim = sim/deg_row
-    #sim = sp.coo_matrix(sim)
+
+    sim = sim / deg_row
+    # sim = sp.coo_matrix(sim)
     whereAreNan = np.isnan(sim)
     whereAreInf = np.isinf(sim)
     sim[whereAreNan] = 0
     sim[whereAreInf] = 0
-    
+
     sim = sp.coo_matrix(sim)
-    #print(sim[0])
+    # print(sim[0])
     return sim.toarray()
+
 
 def normalize_adjAA(W):
     # Calculate row sums
@@ -78,16 +78,16 @@ def normalize_adjAA(W):
     d_mat_inv_sqrt = np.diag(d_inv_sqrt)
     # Calculate the normalized adjacency matrix
     DA = d_mat_inv_sqrt.dot(W)
-    
+
     return W.dot(DA)
 
 
 def normalize_adjCN(W):
-   # ctx = mx.gpu()
+    # ctx = mx.gpu()
     rowsum = np.array(W.sum(1))
     d_inv_sqrt = np.power(rowsum, -0.5).flatten()
     d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
-   # d_mat_inv_sqrt = mx.nd.array(np.diag(d_inv_sqrt), ctx=ctx)
+    # d_mat_inv_sqrt = mx.nd.array(np.diag(d_inv_sqrt), ctx=ctx)
     return np.dot(W, W)
 
 
@@ -116,97 +116,71 @@ def normalize_adjHDI(adj):
     return sim
 
 
-def mymaximum (A, B):
-    BisBigger = A-B
+def mymaximum(A, B):
+    BisBigger = A - B
     BisBigger.data = np.where(BisBigger.data <= 0, 1, 0)
     return A - A.multiply(BisBigger) + B.multiply(BisBigger)
-import numpy as np
-
-def normalize_adjRA(adj):
-    """Symmetrically normalize adjacency matrix."""
-    rowsum = np.sum(adj, axis=1)
-    d_inv_sqrt = np.power(rowsum, -1 / 2)
-    d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
-    D = np.diag(d_inv_sqrt)
-    DA = np.dot(D, adj)
-    return np.dot(adj, DA)
-
-import numpy as np
-
-def normalize_rvr(adj):
-    """Normalize the adjacency matrix using RVR."""
-
-    # Compute the row-normalized Laplacian matrix.
-    rowsum = np.sum(adj, axis=1)
-    L = adj / rowsum
-
-    # Compute the RVR matrix.
-    R = np.linalg.inv(L)
-
-    # Normalize the RVR matrix.
-    R_norm = R / np.linalg.norm(R, 'fro')
-
-    return R_norm
 
 
-import numpy as np
+def perturb_adjacency_matrix(adj_matrix, perturbation_factor=0.1):
+    """
+    Perturb the adjacency matrix by adding a random perturbation.
 
+    Parameters:
+    - adj_matrix: Original adjacency matrix
+    - perturbation_factor: Factor to control the amount of perturbation
 
-def normalize_adj_RVR(adj):
-    """Perform Row-wise Vector Renormalization (RVR) on the adjacency matrix."""
-    # Compute the row sums
-    rowsum = np.sum(adj, axis=1)
+    Returns:
+    - Perturbed adjacency matrix
+    """
+    np.random.seed(42)  # Set a seed for reproducibility
+    perturbation = np.random.uniform(low=-perturbation_factor, high=perturbation_factor, size=adj_matrix.shape)
+    perturbed_adj_matrix = adj_matrix + perturbation
 
-    # Compute the inverse square root of the row sums
-    d_inv_sqrt = 1.0 / np.sqrt(rowsum)
+    # Ensure the resulting matrix is symmetric
+    perturbed_adj_matrix = 0.5 * (perturbed_adj_matrix + perturbed_adj_matrix.T)
 
-    # Replace any inf or nan values with 0 to avoid division by zero
-    d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0
-    d_inv_sqrt[np.isnan(d_inv_sqrt)] = 0
-
-    # Create a diagonal matrix with the inverse square root of the row sums
-    d_mat_inv_sqrt = np.diag(d_inv_sqrt)
-
-    # Perform RVR normalization
-    normalized_adj = np.dot(np.dot(d_mat_inv_sqrt,adj),d_mat_inv_sqrt)
-
-    return normalized_adj
+    return perturbed_adj_matrix
 
 
 # load dataset
-#Adj = get_adjacency_matrix(args.graph_path, args.num_nodes, type='connectivity', id_filename=args.filename_id)
-Adj = get_Gaussian_matrix(args.graph_path, args.num_nodes, args.normalized_k, id_filename=args.filename_id)
-A=normalize_adjCN(Adj)
-A = torch.FloatTensor(Adj).to(args.device)
+Adj = get_adjacency_matrix(args.graph_path, args.num_nodes, type='connectivity', id_filename=args.filename_id)
+# A = torch.FloatTensor(A).to(args.device)
+
+# adj_tensor = torch.tensor(Adj, dtype=torch.float32)
+# A = F.softmax(F.relu(torch.mm(adj_tensor, adj_tensor.t())), dim=1)
+# A=F.softmax(F.relu(adj_tensor.t()), dim=1)
+Adj = normalize_adjHDI(Adj)
+A = torch.tensor(Adj, dtype=torch.float32)
 train_loader, val_loader, test_loader, scaler = get_dataloader(args,
                                                                normalizer=args.normalizer,
-                                                               tod=args.tod, 
+                                                               tod=args.tod,
                                                                dow=False,
-                                                               weather=False, 
+                                                               weather=False,
                                                                single=False)
-print("train loader ",len(train_loader))
+print("train loader ", len(train_loader))
 # *****************************************  初始化模型参数 ****************************************** #
 input_dim = 1
-hidden_dim = 64 
+hidden_dim = 64
 output_dim = 1
-embed_dim = 8   
+embed_dim = 19  # 8
 cheb_k = 2
-horizon = 12 
-num_layers = 1 
+horizon = 12
+num_layers = 1
 heads = 4
 timesteps = 12
 kernel_size = 5
-model = Network(num_node = args.num_nodes, 
-                input_dim = input_dim, 
-                hidden_dim = hidden_dim, 
-                output_dim = output_dim, 
-                embed_dim = embed_dim, 
-                cheb_k = cheb_k, 
-                horizon = horizon, 
-                num_layers = num_layers, 
-                heads = heads, 
-                timesteps = timesteps, 
-                A = A,
+model = Network(num_node=args.num_nodes,
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=output_dim,
+                embed_dim=embed_dim,
+                cheb_k=cheb_k,
+                horizon=horizon,
+                num_layers=num_layers,
+                heads=heads,
+                timesteps=timesteps,
+                A=A,
                 kernel_size=kernel_size)
 model = model.to(args.device)
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3, 4'
@@ -220,6 +194,8 @@ for p in model.parameters():
         nn.init.uniform_(p)
 # print the number of model parameters
 print_model_parameters(model, only_num=False)
+
+
 # *****************************************  定义损失函数、优化器 ****************************************** #
 # 1. init loss function, optimizer
 def masked_mae_loss(scaler, mask_value):
@@ -229,7 +205,10 @@ def masked_mae_loss(scaler, mask_value):
             labels = scaler.inverse_transform(labels)
         mae = MAE_torch(pred=preds, true=labels, mask_value=mask_value)
         return mae
+
     return loss
+
+
 if args.loss_func == 'mask_mae':
     loss = masked_mae_loss(scaler, mask_value=0.0)
 elif args.loss_func == 'mae':
@@ -255,33 +234,40 @@ if args.lr_decay:
 # 1.config log path
 current_time = datetime.now().strftime('%Y%m%d%H%M%S')
 current_dir = os.path.dirname(os.path.realpath(__file__))
-log_dir = os.path.join(current_dir,'experiments', args.dataset, current_time)
+log_dir = os.path.join(current_dir, 'experiments', args.dataset, current_time)
 os.makedirs(log_dir, exist_ok=True)
 print(log_dir)
 args.log_dir = log_dir
 
 # 2.start training
-trainer = Engine(model, 
-                  loss, 
-                  optimizer, 
-                  train_loader, 
-                  val_loader, 
-                  test_loader, 
-                  scaler,
-                  args, 
-                  lr_scheduler)
+trainer = Engine(model,
+                 loss,
+                 optimizer,
+                 train_loader,
+                 val_loader,
+                 test_loader,
+                 scaler,
+                 args,
+                 lr_scheduler)
 if args.mode == 'train':
     trainer.train()
 elif args.mode == 'test':
-    checkpoint = "./experiments/PEMS04/20220811215513/Modified_PEMS04_AFDGCN_best_model.pth"
+    checkpoint = "./experiments/PEMS04/20240119141320/PEMS04_AFDGCN_best_model.pth"  # en yeni modeli kullan
     model.load_state_dict(torch.load(checkpoint, map_location=torch.device('cpu')))
 
-   # model.load_state_dict(torch.load(checkpoint))  # map_location='cuda:5'
+    # model.load_state_dict(torch.load(checkpoint))  # map_location='cuda:5'
     # node_embedding = model.node_embedding
-    # adj = F.softmax(F.relu(torch.mm(node_embedding, node_embedding.transpose(0, 1))), dim=1)
+    # adj = F.softmax(F.relu(torch.mm(node_embedding, node_embedding.transpose(0, 1))), dim=1) adj transpose
     # adj = torch.mm(node_embedding, node_embedding.transpose(0, 1))
     # print(adj.shape)
     # np.save('adaptive_matrix.npy', adj.detach().cpu().numpy())
+
+    model.load_state_dict(torch.load(checkpoint))  # map_location='cuda:5'
+    adj_tensor = torch.tensor(Adj, dtype=torch.float32)
+    adj_tensor = adj_tensor.to(torch.device('cuda'))
+    adj = F.softmax(F.relu(torch.mm(adj_tensor, adj_tensor.t())), dim=1)
+    print(adj.shape)
+    np.save('adaptive_matrix.npy', adj.detach().cpu().numpy())
     print("load saved model...")
     trainer.test(model, trainer.args, test_loader, scaler, trainer.logger)
 else:
