@@ -892,7 +892,7 @@ class AVWGCN(nn.Module):
         node_num = node_embedding.shape[0]
         # 自适应的学习节点间的内s在隐藏关联获取邻接矩阵
         # D^(-1/2)AD^(-1/2)=softmax(ReLU(E * E^T)) - (N, N)
-        coeffs = generateCoeff(11, 'Chebyshev', 'g_0', False, False, -0.9, 0.9, True)
+        coeffs = generateCoeff(11, 'legendre', 'g_0', False, False, -0.9, 0.9, True)
         support = F.softmax(F.relu(torch.mm(node_embedding, node_embedding.transpose(0, 1))), dim=1)
         if ALGO == 'Garnoldi':
           support = coeffs[0] * support
@@ -904,15 +904,15 @@ class AVWGCN(nn.Module):
             # Z(k) = 2 * L * Z(k-1) - Z(k-2)
             if ALGO == 'Garnoldi':
               #Chebyshev
-              support_set.append(torch.matmul(2 * coeffs[k] * support, support_set[-1]) - support_set[-2])
+              #support_set.append(torch.matmul(2 * coeffs[k] * support, support_set[-1]) - support_set[-2])
               
               #Monomial
               #support_set.append(torch.matmul(support*coeffs[k], support_set[-1]))
               
               #Legendre
-              #a = (2 * k - 1) / k
-              #b = (k - 1) / k
-              #support_set.append(torch.matmul(a * support*coeffs[k], support_set[-1]) - b * support_set[-2])
+              a = (2 * k - 1) / k
+              b = (k - 1) / k
+              support_set.append(torch.matmul(a * support*coeffs[k], support_set[-1]) - b * support_set[-2])
 
               #Jacobi
               #a = (2 * k + alpha + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta))
@@ -920,15 +920,15 @@ class AVWGCN(nn.Module):
               #support_set.append(torch.matmul(a * support*coeffs[k], support_set[-1]) - b * support_set[-2])
             else:
               #Chebyshev
-              support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
+              #support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
               
               #Monomial
               #support_set.append(torch.matmul(support, support_set[-1]))
               
               #Legendre
-              #a = (2 * k - 1) / k
-              #b = (k - 1) / k
-              #support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
+              a = (2 * k - 1) / k
+              b = (k - 1) / k
+              support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
 
               #Jacobi
               #a = (2 * k + alpha + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta))
@@ -1174,8 +1174,8 @@ class GPR_prop(MessagePassing):
 class GPRGNN(torch.nn.Module):
     def __init__(self, num_node, input_dim, output_dim, hidden, cheb_k, num_layers, embed_dim):
         super(GPRGNN, self).__init__()
-        self.lin1 = Linear(384, 64)  # (hidden_dim*num_nodes, hidden_dim) 19, 1
-        self.lin2 = Linear(64, 384)
+        self.lin1 = Linear(512, 64)  # (hidden_dim*num_nodes, hidden_dim) 19, 1
+        self.lin2 = Linear(64, 512)
 
         self.prop1 = GPR_prop(cheb_k, 0.5, 'PPR', None)
 
@@ -1213,7 +1213,7 @@ class GPRGNN(torch.nn.Module):
 
             # x: (B, T, N, hidden_dim)
             # Reshape it from (5, 1216) to (5, 1, 19, 64)
-            x = x.view(x.size(0), 1, 6, 64)  # Manually reshape to (5, 1, 19, 64)
+            x = x.view(x.size(0), 1, 8, 64)  # Manually reshape to (5, 1, 19, 64)
           
 
             # Apply log softmax along the appropriate dimension
@@ -1338,8 +1338,8 @@ class APPNP(MessagePassing):
 class APPNP_Net(torch.nn.Module):
     def __init__(self, num_node, input_dim, output_dim, hidden, cheb_k, num_layers, embed_dim):
         super(APPNP_Net, self).__init__()
-        self.lin1 = Linear(384, 64)  # (512, 64) for Konya & (1216,64) for Kcetas
-        self.lin2 = Linear(64, 384)
+        self.lin1 = Linear(512, 64)  # (512, 64) for Konya & (1216,64) for Kcetas
+        self.lin2 = Linear(64, 512)
         self.prop1 = APPNP(cheb_k, 0.5, 0.2, False, True, True)
         self.dropout = 0.2
         self.num_layers = num_layers
@@ -1379,7 +1379,7 @@ class APPNP_Net(torch.nn.Module):
         x = x.transpose(0, 1)
         # Reshape it from (5, 1216) to (5, 1, 19, 64) for Kcetas
         # (5, 1, 8, 64) for Konya
-        x = x.reshape(x.size(0), 1, 6, 64)  # Manually reshape to (5, 1, 19, 64)
+        x = x.reshape(x.size(0), 1, 8, 64)  # Manually reshape to (5, 1, 19, 64)
         # print("After reshaping, x size:", x.size())
 
         # Apply log softmax along the appropriate dimension
