@@ -24,7 +24,7 @@ ALGO = ALGO_OPTIONS[0]
 FILENAME_ID = None
 
 # 1. get configuration
-config_file = '/content/AFDGCN_Garnoldi/conf/{}_{}.conf'.format(DATASET, MODEL)
+config_file = '/content/_AFDGCN_Garnoldi/conf/{}_{}.conf'.format(DATASET, MODEL)
 print(config_file)
 config = configparser.ConfigParser()
 config.read(config_file)
