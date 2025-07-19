@@ -915,9 +915,24 @@ class AVWGCN(nn.Module):
               #support_set.append(torch.matmul(a * support*coeffs[k], support_set[-1]) - b * support_set[-2])
 
               #Jacobi
-              a = (2 * k + alpha + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta))
-              b = (k + alpha - 1) * (k + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta) * (2 * k + alpha + beta - 2))
-              support_set.append(torch.matmul(a * support*coeffs[k], support_set[-1]) - b * support_set[-2])
+              # Jacobi (iyileştirilmiş v2)
+              alpha = 1.0
+              beta = 1.0
+              eps = 1e-6
+              scale = 0.85
+
+              ab = alpha + beta
+
+              a_num = (2 * k + ab - 1 + eps) * (2 * k + ab + eps)
+              a_den = (2 * k * (k + ab) + eps)
+              a = scale * a_num / a_den
+
+              b_num = (k + alpha - 1 + eps) * (k + beta - 1 + eps) * (2 * k + ab + eps)
+              b_den = (2 * k * (k + ab) * (2 * k + ab - 2 + eps) + eps)
+              b = scale * b_num / b_den
+
+              support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
+
             else:
               #Chebyshev
               #support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
