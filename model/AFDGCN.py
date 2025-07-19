@@ -892,7 +892,7 @@ class AVWGCN(nn.Module):
         node_num = node_embedding.shape[0]
         # 自适应的学习节点间的内s在隐藏关联获取邻接矩阵
         # D^(-1/2)AD^(-1/2)=softmax(ReLU(E * E^T)) - (N, N)
-        coeffs = generateCoeff(11, 'Legendre', 'g_3', False, False, -0.9, 0.9, True)
+        coeffs = generateCoeff(11, 'Jacobi', 'g_0', False, False, -0.9, 0.9, True)
         support = F.softmax(F.relu(torch.mm(node_embedding, node_embedding.transpose(0, 1))), dim=1)
         if ALGO == 'Garnoldi':
           support = coeffs[0] * support
@@ -913,20 +913,25 @@ class AVWGCN(nn.Module):
               
               #Legendre
               # Legendre with Garnoldi-enhanced scaling
-              scale = 2 / (1 + k)  # Daha iyi yakınsama için sabit bir çarpan
-              eps = 1e-6  # Sıfır bölmeye karşı koruma
+            # scale = 0.9  # Daha iyi yakınsama için sabit bir çarpan
+            # eps = 1e-6  # Sıfır bölmeye karşı koruma
+            # a = scale * (2 * k - 1 + eps) / (k + eps)
+            # b = (k - 1 + eps) / (k + eps)
+            # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
-              a = scale * (2 * k - 1 + eps) / (k + eps)
-              b = (k - 1 + eps) / (k + eps)
+              #Jacobi
+              alpha = 0.0
+              beta = 1.0
+              ab = alpha + beta
+
+              eps = 1e-6
+              a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
+              b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
 
               support_set.append(
                   torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2]
               )
 
-              #Jacobi
-              #a = (2 * k + alpha + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta))
-              #b = (k + alpha - 1) * (k + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta) * (2 * k + alpha + beta - 2))
-              #support_set.append(torch.matmul(a * support*coeffs[k], support_set[-1]) - b * support_set[-2])
             else:
               #Chebyshev
               #support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
@@ -936,21 +941,24 @@ class AVWGCN(nn.Module):
               
               #Legendre
               # Legendre with Garnoldi-enhanced scaling
-              scale = 0.9  # Daha iyi yakınsama için sabit bir çarpan
-              eps = 1e-6  # Sıfır bölmeye karşı koruma
+              #scale = 0.9  # Daha iyi yakınsama için sabit bir çarpan
+              #eps = 1e-6  # Sıfır bölmeye karşı koruma
+              #a = scale * (2 * k - 1 + eps) / (k + eps)
+              # b = (k - 1 + eps) / (k + eps)
+              # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
-              a = scale * (2 * k - 1 + eps) / (k + eps)
-              b = (k - 1 + eps) / (k + eps)
+              #Jacobi
+              alpha = 0.0
+              beta = 1.0
+              ab = alpha + beta
+
+              eps = 1e-6
+              a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
+              b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
 
               support_set.append(
                   torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2]
               )
-
-              #Jacobi
-              #a = (2 * k + alpha + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta))
-              #b = (k + alpha - 1) * (k + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta) * (2 * k + alpha + beta - 2))
-              #support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
-
 
         supports = torch.stack(support_set, dim=0) # (K, N, N)
         # (N, D) * (D, K, C_in, C_out) -> (N, K, C_in, C_out)
