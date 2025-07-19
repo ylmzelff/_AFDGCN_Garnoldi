@@ -947,18 +947,21 @@ class AVWGCN(nn.Module):
 
               #Jacobi
               # Jacobi (iyileştirilmiş formül)
-              alpha = 0.5
-              beta = 0.5
-              eps = 1e-6  # sayısal kararlılık için
+              # Jacobi (iyileştirilmiş v2)
+              alpha = 1.0
+              beta = 1.0
+              eps = 1e-6
+              scale = 0.85
 
               ab = alpha + beta
+
               a_num = (2 * k + ab - 1 + eps) * (2 * k + ab + eps)
               a_den = (2 * k * (k + ab) + eps)
-              a = a_num / a_den
+              a = scale * a_num / a_den
 
               b_num = (k + alpha - 1 + eps) * (k + beta - 1 + eps) * (2 * k + ab + eps)
               b_den = (2 * k * (k + ab) * (2 * k + ab - 2 + eps) + eps)
-              b = b_num / b_den
+              b = scale * b_num / b_den
 
               support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
