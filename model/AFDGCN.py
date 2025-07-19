@@ -931,10 +931,21 @@ class AVWGCN(nn.Module):
               #support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
 
               #Jacobi
-              a = (2 * k + alpha + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta))
-              b = (k + alpha - 1) * (k + beta - 1) * (2 * k + alpha + beta) / (2 * k * (k + alpha + beta) * (2 * k + alpha + beta - 2))
-              support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
+              # Jacobi (iyileştirilmiş formül)
+              alpha = 0.5
+              beta = 0.5
+              eps = 1e-6  # sayısal kararlılık için
 
+              ab = alpha + beta
+              a_num = (2 * k + ab - 1 + eps) * (2 * k + ab + eps)
+              a_den = (2 * k * (k + ab) + eps)
+              a = a_num / a_den
+
+              b_num = (k + alpha - 1 + eps) * (k + beta - 1 + eps) * (2 * k + ab + eps)
+              b_den = (2 * k * (k + ab) * (2 * k + ab - 2 + eps) + eps)
+              b = b_num / b_den
+
+              support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
         supports = torch.stack(support_set, dim=0) # (K, N, N)
         # (N, D) * (D, K, C_in, C_out) -> (N, K, C_in, C_out)
