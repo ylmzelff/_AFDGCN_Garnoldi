@@ -896,10 +896,12 @@ class AVWGCN(nn.Module):
         support = F.softmax(F.relu(torch.mm(node_embedding, node_embedding.transpose(0, 1))), dim=1)
         if ALGO == 'Garnoldi':
           support = coeffs[0] * support
-        
+          support = F.normalize(support, p=1, dim=1)  # 🔧 normalize: satır toplamı = 1
+
         #support = coeffs[0]*support # Open when running Garnoldi
         # 这里得到的support表示标准化的拉普拉斯矩阵
         support_set = [torch.eye(node_num).to(support.device), support]
+
         for k in range(2, self.cheb_k):
             # Z(k) = 2 * L * Z(k-1) - Z(k-2)
             if ALGO == 'Garnoldi':
@@ -911,7 +913,7 @@ class AVWGCN(nn.Module):
               
               #Legendre
               # Legendre with Garnoldi-enhanced scaling
-              scale = 0.9  # Daha iyi yakınsama için sabit bir çarpan
+              scale = 2 / (1 + k)  # Daha iyi yakınsama için sabit bir çarpan
               eps = 1e-6  # Sıfır bölmeye karşı koruma
 
               a = scale * (2 * k - 1 + eps) / (k + eps)
