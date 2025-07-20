@@ -906,7 +906,7 @@ class AVWGCN(nn.Module):
             # Z(k) = 2 * L * Z(k-1) - Z(k-2)
             if ALGO == 'Garnoldi':
               #Chebyshev
-              #support_set.append(torch.matmul(2 * coeffs[k] * support, support_set[-1]) - support_set[-2])
+              support_set.append(torch.matmul(2 * coeffs[k] * support, support_set[-1]) - support_set[-2])
               
               #Monomial
               #support_set.append(torch.matmul(support*coeffs[k], support_set[-1]))
@@ -920,21 +920,19 @@ class AVWGCN(nn.Module):
             # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
               #Jacobi
-              alpha = 0.0
-              beta = 1.0
-              ab = alpha + beta
+              #alpha = 0.0
+              #beta = 1.0
+              #ab = alpha + beta
 
-              eps = 1e-6
-              a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
-              b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
+              #eps = 1e-6
+              #a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
+              #b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
 
-              support_set.append(
-                  torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2]
-              )
+              #support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
             else:
               #Chebyshev
-              #support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
+              support_set.append(torch.matmul(2 * support, support_set[-1]) - support_set[-2])
               
               #Monomial
               #support_set.append(torch.matmul(support, support_set[-1]))
@@ -948,17 +946,15 @@ class AVWGCN(nn.Module):
               # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
               #Jacobi
-              alpha = 0.0
-              beta = 1.0
-              ab = alpha + beta
+              #alpha = 0.0
+              #beta = 1.0
+              #ab = alpha + beta
 
-              eps = 1e-6
-              a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
-              b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
+              #eps = 1e-6
+              #a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
+              #b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
 
-              support_set.append(
-                  torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2]
-              )
+              #support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
         supports = torch.stack(support_set, dim=0) # (K, N, N)
         # (N, D) * (D, K, C_in, C_out) -> (N, K, C_in, C_out)
