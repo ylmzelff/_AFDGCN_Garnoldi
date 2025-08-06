@@ -913,11 +913,11 @@ class AVWGCN(nn.Module):
               
               #Legendre
               # Legendre with Garnoldi-enhanced scaling
-            # scale = 0.9  # Daha iyi yakınsama için sabit bir çarpan
-            # eps = 1e-6  # Sıfır bölmeye karşı koruma
-            # a = scale * (2 * k - 1 + eps) / (k + eps)
-            # b = (k - 1 + eps) / (k + eps)
-            # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
+              # scale = 0.9  # Daha iyi yakınsama için sabit bir çarpan
+              # eps = 1e-6  # Sıfır bölmeye karşı koruma
+              # a = scale * (2 * k - 1 + eps) / (k + eps)
+              # b = (k - 1 + eps) / (k + eps)
+              # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
 
               #Jacobi
               #alpha = 0.0
@@ -943,7 +943,7 @@ class AVWGCN(nn.Module):
               #eps = 1e-6  # Sıfır bölmeye karşı koruma
               #a = scale * (2 * k - 1 + eps) / (k + eps)
               # b = (k - 1 + eps) / (k + eps)
-              # support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
+              # support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
 
               #Jacobi
               #alpha = 0.0
@@ -954,7 +954,7 @@ class AVWGCN(nn.Module):
               #a = (2 * k + ab - 1) * (2 * k + ab) / (2 * k * (k + ab) + eps)
               #b = (k + alpha - 1) * (k + beta - 1) * (2 * k + ab) / ((2 * k) * (k + ab) * (2 * k + ab - 2) + eps)
 
-              #support_set.append(torch.matmul(a * support * coeffs[k], support_set[-1]) - b * support_set[-2])
+              #support_set.append(torch.matmul(a * support, support_set[-1]) - b * support_set[-2])
 
         supports = torch.stack(support_set, dim=0) # (K, N, N)
         # (N, D) * (D, K, C_in, C_out) -> (N, K, C_in, C_out)
